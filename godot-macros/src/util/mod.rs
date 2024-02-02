@@ -106,21 +106,38 @@ pub fn parse_signature(mut signature: TokenStream) -> Function {
 pub fn make_signature_tuple_type(
     class_name: &Ident,
     ret_type: &TokenStream,
-    param_types: &Vec<venial::TyExpr>,
+    param_types: &[TyExpr],
 ) -> TokenStream {
+    // Maps each usage of `Self` to the struct it's referencing,
+    // since `Self` can't be used inside nested functions.
+    fn map_self_to_class_name(tokens: TokenTree, class_name: &Ident) -> TokenTree {
+        match tokens {
+            TokenTree::Group(group) => {
+                let stream: proc_macro2::TokenStream = group
+                    .stream()
+                    .into_iter()
+                    .map(|tt| map_self_to_class_name(tt, class_name))
+                    .collect();
+                TokenTree::Group(Group::new(group.delimiter(), stream))
+            }
+            TokenTree::Ident(ident) if ident == "Self" => TokenTree::Ident(class_name.clone()),
+            tt => tt,
+        }
+    }
+    
     let param_types: Vec<TyExpr> = param_types
         .iter()
         .map(|ty| {
-            let tokens = ty.tokens
+            let tokens = ty
+                .tokens
                 .iter()
                 .flat_map(|tt| tt.into_token_stream())
                 .map(|tt| map_self_to_class_name(tt, class_name))
                 .collect();
-            venial::TyExpr {
-                tokens,
-            }
-        }).collect();
-    
+            TyExpr { tokens }
+        })
+        .collect();
+
     let ret_type: TokenStream = ret_type
         .clone()
         .into_iter()
@@ -128,20 +145,11 @@ pub fn make_signature_tuple_type(
         .collect();
 
     quote::quote! {
-        Poo
+        (#ret_type, #(#param_types),*)
     }
 }
 
-fn map_self_to_class_name(tokens: TokenTree, class_name: &Ident) -> TokenTree {
-    match tokens {
-        TokenTree::Group(group) => {
-            let stream: proc_macro2::TokenStream = group.stream().into_iter().map(|tt| map_self_to_class_name(tt, class_name)).collect();
-            TokenTree::Group(Group::new(group.delimiter(), stream))
-        }
-        TokenTree::Ident(ident) if ident == "Self" => TokenTree::Ident(class_name.clone()),
-        tt => tt,
-    }
-}
+
 
 fn is_punct(tt: &TokenTree, c: char) -> bool {
     match tt {
