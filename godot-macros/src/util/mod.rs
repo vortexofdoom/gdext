@@ -128,7 +128,7 @@ pub fn make_signature_tuple_type(
         .collect();
 
     quote::quote! {
-        (#ret_type, #(#param_types),*)
+        Poo
     }
 }
 
